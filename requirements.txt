@@ -1,3 +1,4 @@
 flask>=3.0
 numpy>=1.26
 anthropic>=0.40   # optional: only for LLM-phrased chatbot answers
+gunicorn
