@@ -1,0 +1,73 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Marketplace Brain</title>
+<style>
+:root{--bg:#eef1ef;--card:#fff;--ink:#14201c;--mute:#5d6b66;--line:#d3dbd7;--acc:#0e7c66;--heat:232,163,61}
+@media(prefers-color-scheme:dark){:root{--bg:#0f1714;--card:#17211d;--ink:#e6eeea;--mute:#93a39c;--line:#2a3833;--acc:#3cc9a6}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 system-ui,sans-serif}
+header{padding:20px 24px 4px}h1{margin:0;font-size:26px;letter-spacing:-.02em}header p{margin:2px 0 0;color:var(--mute)}
+main{display:grid;grid-template-columns:minmax(300px,1fr) minmax(300px,420px);gap:16px;padding:16px 24px 24px}
+@media(max-width:820px){main{grid-template-columns:1fr}}
+section{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px}
+h2{margin:0 0 10px;font-size:16px}
+.ctl{display:flex;flex-wrap:wrap;gap:14px;align-items:center;margin-bottom:12px}
+label{display:flex;gap:6px;align-items:center;color:var(--mute)}
+#grid{display:grid;grid-template-columns:repeat(8,1fr);gap:3px}
+.cell{aspect-ratio:1;border:2px solid transparent;border-radius:4px;font:11px system-ui;color:var(--ink);cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:0}
+.cell:focus-visible{outline:2px solid var(--acc)}
+.me{border-color:var(--ink)}.best{border-color:var(--acc);box-shadow:inset 0 0 0 2px var(--acc)}
+.cell b{font-size:13px}.cell i{font-style:normal;color:var(--mute)}
+.key{color:var(--mute);margin-top:8px;font-size:13px}
+button.go{background:var(--acc);color:#fff;border:0;border-radius:6px;padding:8px 14px;font:inherit;cursor:pointer}
+.bar{height:14px;border-radius:3px;background:var(--acc);margin:4px 0 10px;transition:width .4s}
+.bar.base{background:var(--mute)}
+#log{height:260px;overflow:auto;border:1px solid var(--line);border-radius:6px;padding:8px;margin-bottom:8px}
+.m{margin:6px 0;max-width:90%;padding:6px 10px;border-radius:8px;background:var(--bg)}.m.u{margin-left:auto;background:var(--acc);color:#fff}
+.m small{display:block;color:var(--mute)}
+form{display:flex;gap:6px}input[type=text]{flex:1;padding:8px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--ink);font:inherit}
+.chips{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px}.chips button{border:1px solid var(--line);background:none;color:var(--ink);border-radius:14px;padding:3px 10px;cursor:pointer;font:13px system-ui}
+</style></head><body>
+<header><h1>Marketplace Brain</h1><p>Simulated city: where demand will be, where drivers should go, and an assistant that answers from that data.</p></header>
+<main>
+<div>
+<section><h2>Demand forecast (requests per 15 min)</h2>
+<div class="ctl">
+<label>Hour <input id="hour" type="range" min="16" max="27" step="0.5" value="21"><span id="hv">21:00</span></label>
+<label><input id="event" type="checkbox" checked> Stadium event ending</label>
+<label><input id="surge" type="checkbox"> Surge (rain)</label>
+<label><input id="down" type="checkbox"> Model down</label></div>
+<div id="grid" role="grid" aria-label="City zones"></div>
+<p class="key">Shading = forecast demand. Number below = drivers present. Black outline = you (click a zone to move). Green outline = best zone to go to.</p>
+<p id="rec"></p></section>
+<section style="margin-top:16px"><h2>Does guidance help? (5 simulated evenings)</h2>
+<button class="go" id="cmp">Run comparison</button><div id="res" style="margin-top:12px"></div></section>
+</div>
+<section><h2>Driver assistant</h2>
+<div class="chips"><button>Where should I go now?</button><button>How much did I earn today?</button><button>How do I upload documents?</button></div>
+<div id="log" aria-live="polite"></div>
+<form id="f"><input id="q" type="text" placeholder="Ask about earnings, where to drive, payouts" aria-label="Message"><button class="go">Send</button></form></section>
+</main>
+<script>
+const $=id=>document.getElementById(id);let me=[2,2];
+const qs=()=>new URLSearchParams({hour:$("hour").value,event:$("event").checked,surge:$("surge").checked,down:$("down").checked,r:me[0],c:me[1]});
+const clock=h=>{h=+h%24;return String(Math.floor(h)).padStart(2,"0")+":"+(h%1?"30":"00")};
+async function refresh(){
+ $("hv").textContent=clock($("hour").value);
+ const d=await (await fetch("/api/state?"+qs())).json();const mx=Math.max(...d.forecast.flat());$("grid").innerHTML="";
+ d.forecast.forEach((row,r)=>row.forEach((v,c)=>{const b=document.createElement("button");
+  b.className="cell"+(r==me[0]&&c==me[1]?" me":"")+(r==d.best.r&&c==d.best.c?" best":"");
+  b.style.background=`rgba(var(--heat),${(.08+.85*v/mx).toFixed(2)})`;b.innerHTML=`<b>${v.toFixed(1)}</b><i>${d.supply[r][c]}</i>`;
+  b.title=`Zone ${r},${c}`;b.onclick=()=>{me=[r,c];refresh()};$("grid").append(b)}));
+ const b=d.best;$("rec").textContent=(b.stay_here?"Stay here. ":`Go to ${b.zone} (${b.distance} away). `)+`${b.expected_requests_15min} requests expected, ${b.drivers_there} drivers there.`+(b.stale_data?" Model is down: using last week's average.":"")}
+["hour","event","surge","down"].forEach(i=>$(i).addEventListener("input",refresh));
+$("cmp").onclick=async()=>{$("res").textContent="Simulating...";
+ try{const d=await (await fetch("/api/compare?"+qs())).json();const row=(n,x,c)=>`<div>${n}: ${x.idle_pct}% idle, ${x.trips} trips, ${x.lost} requests missed</div><div class="bar ${c}" style="width:${x.idle_pct*2}%"></div>`;
+ $("res").innerHTML=row("Random drivers",d.random,"base")+row("Forecast-guided",d.forecast,"")+`<b>Idle time cut by ${d.idle_reduction_pct}%</b>`}
+ catch(e){$("res").textContent="Could not reach the backend. Is app.py running?"}};
+function add(t,cls,tag){const m=document.createElement("div");m.className="m "+cls;m.textContent=t;if(tag){const s=document.createElement("small");s.textContent=tag;m.prepend(s)}$("log").append(m);$("log").scrollTop=1e9}
+async function send(t){add(t,"u");
+ try{const r=await fetch("/api/chat",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({message:t,hour:+$("hour").value,event:$("event").checked,surge:$("surge").checked,down:$("down").checked,zone:me})});
+ const d=await r.json();add(d.reply||d.error,"a",d.agent?d.agent+" agent":"")}catch(e){add("Assistant is offline. Start the backend and try again.","a")}}
+$("f").onsubmit=e=>{e.preventDefault();const t=$("q").value.trim();if(t){$("q").value="";send(t)}};
+document.querySelectorAll(".chips button").forEach(b=>b.onclick=()=>send(b.textContent));
+refresh();
+</script></body></html>
